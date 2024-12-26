@@ -35,7 +35,7 @@ pub fn main() !void {
     print("text: {s}\n\n", .{ text });
 
     const bytes = @as([] const u8, text);
-    const size = bytes.len/32 * 32; // handling remainder text is left as an exercise
+    const size = bytes.len/32 * 32;     // handling remainder text is left as an exercise
     var offset: usize = 0;
     while (offset < size) : (offset += 32) {
         var mask = nextBitmask32(bytes.ptr, offset);
