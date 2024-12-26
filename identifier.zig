@@ -24,6 +24,7 @@ fn nextBitmask32(base_ptr: [*]const u8, offset: usize) u32 {
 
     print("bit_A_Z  {b:0>32}\n", .{ bit_A_Z });
     print("bit_a_z  {b:0>32}\n", .{ bit_a_z });
+    print("bit_u    {b:0>32}\n", .{ bit_u });
     print("alphas   {b:0>32}\n", .{ bit_azu });
     print("digits   {b:0>32}\n", .{ bit_0_9 });
 
@@ -43,14 +44,14 @@ pub fn main() !void {
 
         // Dump the identifiers found.
         var pos = offset;
-        while (mask != 0) {             // ensure mask having some 1-bits.
-            const start = @ctz(mask);   // start position of next ident.
-            mask = mask >> @as(u5, @intCast(start));
-            const end = @ctz(~mask);    // end position of next ident.
-            mask = mask >> @as(u5, @intCast(end));
+        while (mask != 0) {             // ensure the mask has some bits.
+            const start = @ctz(mask);   // the start position of current ident.
+            mask >>= @intCast(start);   // shift the mask down to the start pos.
+            const end = @ctz(~mask);    // the end position of current ident.
+            mask >>= @intCast(end);     // shift the mask down to the end pos.
             const ident = bytes[pos+start .. pos+start+end];
-            pos = pos + start + end;
             print("  ident: {s}", .{ ident });
+            pos = pos + start + end;
         }
         print("\n\n", .{});
     }
