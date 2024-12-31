@@ -8,8 +8,8 @@ const Vec32 = @Vector(32, u8);      // Assume SIMD-256 support with 32 byte vect
 const Arr32 = *const [32]u8;        // Cast ptr to [32] array before cast to Vec32.
 
 fn nextBitmask32(raw_ptr: [*]const u8) u32 {
-    const arr32     = @as(Arr32, @ptrCast(raw_ptr)).*;
-    const vec32     = @as(Vec32, arr32);
+    const arr32     = @as(Arr32, @ptrCast(raw_ptr));
+    const vec32     = @as(Vec32, arr32.*);
 
     const bit_A_Z   = @as(u32, @bitCast(vec32 >= @as(Vec32, @splat('A')))) &
                       @as(u32, @bitCast(vec32 <= @as(Vec32, @splat('Z'))));
@@ -31,9 +31,12 @@ fn nextBitmask32(raw_ptr: [*]const u8) u32 {
     return bit_azu | bit_0_9;
 }
 
+// Removing the intermediate variables produces less asm instructions.
+// Shouldn't the compiler (LLVM?) optimize away the intermediate variables?
+// Anyway this is the improved version.
 fn nextBitmask32b(raw_ptr: [*]const u8) u32 {
-    const arr32 = @as(Arr32, @ptrCast(raw_ptr)).*;
-    const vec32 = @as(Vec32, arr32);
+    const arr32 = @as(Arr32, @ptrCast(raw_ptr));
+    const vec32 = @as(Vec32, arr32.*);
     return
         (@as(u32, @bitCast(vec32 >= @as(Vec32, @splat('A')))) &
          @as(u32, @bitCast(vec32 <= @as(Vec32, @splat('Z'))))) |
