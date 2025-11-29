@@ -1,13 +1,14 @@
 
 const std = @import("std");
 
-pub fn maxIndex(comptime N: usize, comptime T: type, comptime MIN: T, array: [N]T, start: usize, end: usize) usize {
+pub fn maxIndex(comptime N: usize, comptime T: type, comptime MIN: T,
+                array: [N]T, start: usize, end: usize) usize {
     const VecT              = @Vector(N, T);
     const v_lowest: VecT    = @splat(MIN);
-    const IndexI            = std.simd.VectorIndex(VecT);   // integer type for the index.
+    const IndexI            = std.simd.VectorIndex(VecT);   // index type
     const VecI              = @Vector(N, IndexI);
     const vi_iota: VecI     = std.simd.iota(IndexI, N);
-    const vi_hi_idx: VecI   = @splat(~@as(IndexI, 0));      // vector of the highest index.
+    const vi_hi_idx: VecI   = @splat(~@as(IndexI, 0));      // highest index
 
     const v_array: VecT     = array;
     const vi_start: VecI    = @splat(@intCast(start));
