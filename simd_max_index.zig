@@ -1,23 +1,28 @@
 
 const std = @import("std");
 
+/// N - array length. 
+/// T - array element type.
+/// N * sizeof(T) should be a multiple of the SIMD register byte size.
+/// array - the array data.
+/// start, end - range of elements to search, inclusive.
 pub fn maxIndex(comptime N: usize, comptime T: type, comptime MIN: T,
                 array: [N]T, start: usize, end: usize) usize {
-    const VecT              = @Vector(N, T);
-    const v_lowest: VecT    = @splat(MIN);
-    const IndexI            = std.simd.VectorIndex(VecT);   // index type
-    const VecI              = @Vector(N, IndexI);
+    const VecT: type        = @Vector(N, T);
+    const v_lowest: VecT    = @splat(MIN);                  // for padding
+    const IndexI: type      = std.simd.VectorIndex(VecT);   // index type
+    const VecI: type        = @Vector(N, IndexI);
     const vi_iota: VecI     = std.simd.iota(IndexI, N);
     const vi_hi_idx: VecI   = @splat(~@as(IndexI, 0));      // highest index
 
     const v_array: VecT     = array;
     const vi_start: VecI    = @splat(@intCast(start));
     const vi_end: VecI      = @splat(@intCast(end));
-    const vb_clamped_mask   = (vi_iota >= vi_start) & (vi_iota <= vi_end);
-    const v_clamped: VecT   = @select(T, vb_clamped_mask, v_array, v_lowest);
+    const vb_clamp_mask     = (vi_iota >= vi_start) & (vi_iota <= vi_end);
+    const v_clamped: VecT   = @select(T, vb_clamp_mask, v_array, v_lowest);
     const max_value: T      = @reduce(.Max, v_clamped);
     const v_max_value: VecT = @splat(max_value);
-    const vb_max_mask       = v_clamped == v_max_value;
+    const vb_max_mask       = v_clamped == v_max_value;     // mark the max items
     const vi_indices: VecI  = @select(IndexI, vb_max_mask, vi_iota, vi_hi_idx);
     const max_idx: IndexI   = @reduce(.Min, vi_indices);
 
@@ -84,8 +89,8 @@ test {
     const arr1: [N]T = .{ 9, 2, 17, 11, 1, 2, 50, 24 } ** 3 ++ .{ 99, 101, 17, 11, 1, 2, 101, 99 };
 
     std.debug.print("arr1: {any}\n", .{arr1});
-    std.debug.print("1. max_idx: {} between {} to {}\n", .{maxIndex(N, T, 0, arr1, 3, 29), 3, 29});
-    std.debug.print("2. max_idx: {} between {} to {}\n", .{maxIndex(N, T, 0, arr1, 5, 24), 5, 24});
+    std.debug.print("1. max_idx: {} between {} and {}\n", .{maxIndex(N, T, 0, arr1, 3, 29), 3, 29});
+    std.debug.print("2. max_idx: {} between {} and {}\n", .{maxIndex(N, T, 0, arr1, 5, 24), 5, 24});
 }
 
 test {
@@ -94,8 +99,8 @@ test {
     const arr1: [N]T = .{ 9, 2, 17, 11, 1, 2, 50, 24 } ** 31 ++ .{ 99, 101, 17, 11, 1, 2, 101, 99 };
 
     std.debug.print("arr1: {any}\n", .{arr1});
-    std.debug.print("1. max_idx: {} between {} to {}\n", .{maxIndex(N, T, 0, arr1, 3, 29), 3, 29});
-    std.debug.print("2. max_idx: {} between {} to {}\n", .{maxIndex(N, T, 0, arr1, 5, 250), 5, 250});
+    std.debug.print("1. max_idx: {} between {} and {}\n", .{maxIndex(N, T, 0, arr1, 3, 29), 3, 29});
+    std.debug.print("2. max_idx: {} between {} and {}\n", .{maxIndex(N, T, 0, arr1, 5, 250), 5, 250});
 }
 
 test {
@@ -104,6 +109,8 @@ test {
     const arr1: [N]T = .{ -9, -2, -17, -11, -1, -2, -50, -24 } ** 7 ++ .{ 1, 2, 3, 4, 5, 6, 7, 8 };
 
     std.debug.print("arr1: {any}\n", .{arr1});
+    std.debug.print("1. max_idx: {} between {} and {}\n", .{maxIndex(N, T, -127, arr1, 0, 0), 0, 0});
     std.debug.print("2. max_idx: {} between {} and {}\n", .{maxIndex(N, T, -127, arr1, 5, 63), 5, 63});
+    std.debug.print("3. max_idx: {} between {} and {}\n", .{maxIndex(N, T, -127, arr1, 63, 63), 63, 63});
 }
 
