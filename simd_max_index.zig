@@ -6,6 +6,7 @@
 
 const std = @import("std");
 
+
 /// N - array length. 
 /// T - array element type.
 /// N * sizeof(T) should be a multiple of the SIMD register byte size.
@@ -207,29 +208,38 @@ fn benchmark(comptime N: usize, comptime T: type, comptime MIN: T, repeat: usize
 }
 
 test {
-    std.debug.print("step, [64]u8,    simd / regular = {:.3}x\n", .{try benchmark(64, u8, 0, 10000, 0, true)});
-    std.debug.print("step, [32]u16,   simd / regular = {:.3}x\n", .{try benchmark(32, u16, 0, 10000, 0, true)});
-    std.debug.print("step, [16]u32,   simd / regular = {:.3}x\n", .{try benchmark(16, u32, 0, 10000, 0, true)});
+    std.debug.print("\n", .{});
+    std.debug.print("step, [64]u8,    simd / regular = {:.3}x\n", .{try benchmark(64, u8, 0, 5000, 0, true)});
+    std.debug.print("step, [32]u16,   simd / regular = {:.3}x\n", .{try benchmark(32, u16, 0, 5000, 0, true)});
+    std.debug.print("step, [16]u32,   simd / regular = {:.3}x\n", .{try benchmark(16, u32, 0, 5000, 0, true)});
 
-    std.debug.print("full, [64]u8,    simd / regular = {:.3}x\n", .{try benchmark(64, u8, 0, 10000, 0, false)});
-    std.debug.print("full, [32]u16,   simd / regular = {:.3}x\n", .{try benchmark(32, u16, 0, 10000, 0, false)});
-    std.debug.print("full, [16]u32,   simd / regular = {:.3}x\n\n", .{try benchmark(16, u32, 0, 10000, 0, false)});
+    std.debug.print("full, [64]u8,    simd / regular = {:.3}x\n", .{try benchmark(64, u8, 0, 5000, 0, false)});
+    std.debug.print("full, [32]u16,   simd / regular = {:.3}x\n", .{try benchmark(32, u16, 0, 5000, 0, false)});
+    std.debug.print("full, [16]u32,   simd / regular = {:.3}x\n\n", .{try benchmark(16, u32, 0, 5000, 0, false)});
 
-    std.debug.print("step, [256]u8,   simd / regular = {:.3}x\n", .{try benchmark(256, u8, 0, 10000, 0, true)});
-    std.debug.print("step, [128]u16,  simd / regular = {:.3}x\n", .{try benchmark(128, u16, 0, 10000, 0, true)});
-    std.debug.print("step, [64 ]u32,  simd / regular = {:.3}x\n", .{try benchmark(64, u32, 0, 10000, 0, true)});
+    std.debug.print("step, [128]u8,   simd / regular = {:.3}x\n", .{try benchmark(128, u8, 0, 5000, 0, true)});
+    std.debug.print("step, [64 ]u16,  simd / regular = {:.3}x\n", .{try benchmark(64, u16, 0, 5000, 0, true)});
+    std.debug.print("step, [32 ]u32,  simd / regular = {:.3}x\n", .{try benchmark(32, u32, 0, 5000, 0, true)});
 
-    std.debug.print("full, [256]u8,   simd / regular = {:.3}x\n", .{try benchmark(256, u8, 0, 10000, 0, false)});
-    std.debug.print("full, [128]u16,  simd / regular = {:.3}x\n", .{try benchmark(128, u16, 0, 10000, 0, false)});
-    std.debug.print("full, [64 ]u32,  simd / regular = {:.3}x\n\n", .{try benchmark(64, u32, 0, 10000, 0, false)});
+    std.debug.print("full, [128]u8,   simd / regular = {:.3}x\n", .{try benchmark(128, u8, 0, 5000, 0, false)});
+    std.debug.print("full, [64 ]u16,  simd / regular = {:.3}x\n", .{try benchmark(64, u16, 0, 5000, 0, false)});
+    std.debug.print("full, [32 ]u32,  simd / regular = {:.3}x\n\n", .{try benchmark(32, u32, 0, 5000, 0, false)});
 
-    std.debug.print("step, [512]u8,   simd / regular = {:.3}x\n", .{try benchmark(512, u8, 0, 10000, 0, true)});
-    std.debug.print("step, [256]u16,  simd / regular = {:.3}x\n", .{try benchmark(256, u16, 0, 10000, 0, true)});
-    std.debug.print("step, [128]u32,  simd / regular = {:.3}x\n", .{try benchmark(128, u32, 0, 10000, 0, true)});
+    std.debug.print("step, [256]u8,   simd / regular = {:.3}x\n", .{try benchmark(256, u8, 0, 5000, 0, true)});
+    std.debug.print("step, [128]u16,  simd / regular = {:.3}x\n", .{try benchmark(128, u16, 0, 5000, 0, true)});
+    std.debug.print("step, [64 ]u32,  simd / regular = {:.3}x\n", .{try benchmark(64, u32, 0, 5000, 0, true)});
 
-    std.debug.print("full, [512]u8,   simd / regular = {:.3}x\n", .{try benchmark(512, u8, 0, 10000, 0, false)});
-    std.debug.print("full, [256]u16,  simd / regular = {:.3}x\n", .{try benchmark(256, u16, 0, 10000, 0, false)});
-    std.debug.print("full, [128]u32,  simd / regular = {:.3}x\n\n", .{try benchmark(128, u32, 0, 10000, 0, false)});
+    std.debug.print("full, [256]u8,   simd / regular = {:.3}x\n", .{try benchmark(256, u8, 0, 5000, 0, false)});
+    std.debug.print("full, [128]u16,  simd / regular = {:.3}x\n", .{try benchmark(128, u16, 0, 5000, 0, false)});
+    std.debug.print("full, [64 ]u32,  simd / regular = {:.3}x\n\n", .{try benchmark(64, u32, 0, 5000, 0, false)});
+
+    std.debug.print("step, [512]u8,   simd / regular = {:.3}x\n", .{try benchmark(512, u8, 0, 5000, 0, true)});
+    std.debug.print("step, [256]u16,  simd / regular = {:.3}x\n", .{try benchmark(256, u16, 0, 5000, 0, true)});
+    std.debug.print("step, [128]u32,  simd / regular = {:.3}x\n", .{try benchmark(128, u32, 0, 5000, 0, true)});
+
+    std.debug.print("full, [512]u8,   simd / regular = {:.3}x\n", .{try benchmark(512, u8, 0, 5000, 0, false)});
+    std.debug.print("full, [256]u16,  simd / regular = {:.3}x\n", .{try benchmark(256, u16, 0, 5000, 0, false)});
+    std.debug.print("full, [128]u32,  simd / regular = {:.3}x\n\n", .{try benchmark(128, u32, 0, 5000, 0, false)});
 
 }
 
