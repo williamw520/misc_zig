@@ -1,4 +1,9 @@
 
+// Run with -O ReleaseFast when running the benchmarks.
+//
+//  zig test -O ReleaseFast simd_max_index.zig
+//
+
 const std = @import("std");
 
 /// N - array length. 
@@ -33,6 +38,24 @@ pub fn maxIndex(comptime N: usize, comptime T: type, comptime MIN: T,
     // std.debug.print("max_idx: {any}\n", .{max_idx});
     return max_idx;
 }
+
+pub fn maxIndex_reg(comptime N: usize, comptime T: type,
+                    array: *const [N]T, start: usize, end: usize) usize {
+    var max_value = array[start];
+    var max_index: usize = start;
+    var i = start + 1;
+
+    while (i <= end) {
+        if (array[i] > max_value) {
+            max_value = array[i];
+            max_index = i;
+        }
+        i += 1;
+    }
+    std.mem.doNotOptimizeAway(max_value);
+    return max_index;
+}
+
 
 export fn test1() usize {
     const N = 16;
@@ -101,6 +124,9 @@ test {
     std.debug.print("arr1: {any}\n", .{arr1});
     std.debug.print("1. max_idx: {} between {} and {}\n", .{maxIndex(N, T, 0, &arr1, 3, 29), 3, 29});
     std.debug.print("2. max_idx: {} between {} and {}\n", .{maxIndex(N, T, 0, &arr1, 5, 250), 5, 250});
+
+    try std.testing.expectEqual(maxIndex(N, T, 0, &arr1, 3, 29), maxIndex_reg(N, T, &arr1, 3, 29));
+    try std.testing.expectEqual(maxIndex(N, T, 0, &arr1, 5, 250), maxIndex_reg(N, T, &arr1, 5, 250));
 }
 
 test {
@@ -112,5 +138,98 @@ test {
     std.debug.print("1. max_idx: {} between {} and {}\n", .{maxIndex(N, T, -127, &arr1, 0, 0), 0, 0});
     std.debug.print("2. max_idx: {} between {} and {}\n", .{maxIndex(N, T, -127, &arr1, 5, 63), 5, 63});
     std.debug.print("3. max_idx: {} between {} and {}\n", .{maxIndex(N, T, -127, &arr1, 63, 63), 63, 63});
+
+    try std.testing.expectEqual(maxIndex(N, T, -127, &arr1, 0, 0), maxIndex_reg(N, T, &arr1, 0, 0));
+    try std.testing.expectEqual(maxIndex(N, T, -127, &arr1, 5, 63), maxIndex_reg(N, T, &arr1, 5, 63));
+    try std.testing.expectEqual(maxIndex(N, T, -127, &arr1, 63, 63), maxIndex_reg(N, T, &arr1, 63, 63));
+}
+
+
+pub fn randomNumbers(comptime T: type, numbers: []T, seed: u64) void {
+    var prng = std.Random.DefaultPrng.init(seed);
+    const rand = prng.random();
+
+    for (numbers) |*num| {
+        if (@typeInfo(T) == .int) {
+            num.* = rand.int(T);
+        } else if (@typeInfo(T) == .float) {
+            num.* = rand.float(T);
+        } else {
+            @compileError("Unsupported type: " ++ @typeName(T));
+        }
+    }
+}
+
+test {
+    const alloc = std.testing.allocator;
+
+    const slice1 = try alloc.alloc(u8, 64);
+    defer alloc.free(slice1);
+    randomNumbers(u8, slice1, 0);
+    // std.debug.print("rand slice1: {any}\n", .{slice1});
+    
+    const slice2 = try alloc.alloc(f32, 64);
+    defer alloc.free(slice2);
+    randomNumbers(f32, slice2, 0);
+    // std.debug.print("rand slice2: {any}\n", .{slice2});
+}
+
+// N - number of nodes, B - dependency branching factor, M - max_range flag, R - repeats
+fn benchmark(comptime N: usize, comptime T: type, comptime MIN: T, repeat: usize, seed: u64, comptime stepping: bool) !f128 {
+    const alloc = std.testing.allocator;
+    const ptr = try alloc.alloc(T, N);
+    defer alloc.free(ptr);
+    const array: *[N]T = @as(*[N]T, @ptrCast(ptr.ptr));
+    randomNumbers(T, array, seed);
+
+    const start_ns1 = std.time.nanoTimestamp();
+    for (0..repeat) |_| {
+        for (array, 0..) |_, i| {
+            const start = if (stepping) i else 0;
+            const max_idx = maxIndex(N, T, MIN, array, start, N-1);
+            std.mem.doNotOptimizeAway(max_idx);
+        }
+    }
+    const elapsed_ns1 = std.time.nanoTimestamp() - start_ns1;
+
+    const start_ns2 = std.time.nanoTimestamp();
+    for (0..repeat) |_| {
+        for (array, 0..) |_, i| {
+            const start = if (stepping) i else 0;
+            const max_idx = maxIndex_reg(N, T, array, start, N-1);
+            std.mem.doNotOptimizeAway(max_idx);
+        }
+    }
+    const elapsed_ns2 = std.time.nanoTimestamp() - start_ns2;
+
+    const ratio: f128 = @as(f128, @floatFromInt(elapsed_ns2)) / @as(f128, @floatFromInt(elapsed_ns1));
+    return ratio;
+}
+
+test {
+    std.debug.print("step, [64]u8,    simd / regular = {:.3}x\n", .{try benchmark(64, u8, 0, 10000, 0, true)});
+    std.debug.print("step, [32]u16,   simd / regular = {:.3}x\n", .{try benchmark(32, u16, 0, 10000, 0, true)});
+    std.debug.print("step, [16]u32,   simd / regular = {:.3}x\n", .{try benchmark(16, u32, 0, 10000, 0, true)});
+
+    std.debug.print("full, [64]u8,    simd / regular = {:.3}x\n", .{try benchmark(64, u8, 0, 10000, 0, false)});
+    std.debug.print("full, [32]u16,   simd / regular = {:.3}x\n", .{try benchmark(32, u16, 0, 10000, 0, false)});
+    std.debug.print("full, [16]u32,   simd / regular = {:.3}x\n\n", .{try benchmark(16, u32, 0, 10000, 0, false)});
+
+    std.debug.print("step, [256]u8,   simd / regular = {:.3}x\n", .{try benchmark(256, u8, 0, 10000, 0, true)});
+    std.debug.print("step, [128]u16,  simd / regular = {:.3}x\n", .{try benchmark(128, u16, 0, 10000, 0, true)});
+    std.debug.print("step, [64 ]u32,  simd / regular = {:.3}x\n", .{try benchmark(64, u32, 0, 10000, 0, true)});
+
+    std.debug.print("full, [256]u8,   simd / regular = {:.3}x\n", .{try benchmark(256, u8, 0, 10000, 0, false)});
+    std.debug.print("full, [128]u16,  simd / regular = {:.3}x\n", .{try benchmark(128, u16, 0, 10000, 0, false)});
+    std.debug.print("full, [64 ]u32,  simd / regular = {:.3}x\n\n", .{try benchmark(64, u32, 0, 10000, 0, false)});
+
+    std.debug.print("step, [512]u8,   simd / regular = {:.3}x\n", .{try benchmark(512, u8, 0, 10000, 0, true)});
+    std.debug.print("step, [256]u16,  simd / regular = {:.3}x\n", .{try benchmark(256, u16, 0, 10000, 0, true)});
+    std.debug.print("step, [128]u32,  simd / regular = {:.3}x\n", .{try benchmark(128, u32, 0, 10000, 0, true)});
+
+    std.debug.print("full, [512]u8,   simd / regular = {:.3}x\n", .{try benchmark(512, u8, 0, 10000, 0, false)});
+    std.debug.print("full, [256]u16,  simd / regular = {:.3}x\n", .{try benchmark(256, u16, 0, 10000, 0, false)});
+    std.debug.print("full, [128]u32,  simd / regular = {:.3}x\n\n", .{try benchmark(128, u32, 0, 10000, 0, false)});
+
 }
 
