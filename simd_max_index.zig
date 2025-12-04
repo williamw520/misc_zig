@@ -175,7 +175,6 @@ test {
     // std.debug.print("rand slice2: {any}\n", .{slice2});
 }
 
-// N - number of nodes, B - dependency branching factor, M - max_range flag, R - repeats
 fn benchmark(comptime N: usize, comptime T: type, comptime MIN: T, repeat: usize, seed: u64, comptime stepping: bool) !f128 {
     const alloc = std.testing.allocator;
     const ptr = try alloc.alloc(T, N);
