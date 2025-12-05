@@ -15,12 +15,11 @@ pub fn main() !void {
     defer file.close();
 
     var read_buf: [4096]u8 = undefined;
-    var file_reader = file.reader(&read_buf);
-    const reader = &file_reader.interface;
+    var f_reader = file.reader(&read_buf);
 
     var buf = std.Io.Writer.Allocating.init(alloc);
     defer buf.deinit();
-    const bytes_read = try reader.streamRemaining(&buf.writer);
+    const bytes_read = try f_reader.interface.streamRemaining(&buf.writer);
 
     std.debug.print("bytes: {}\n", .{bytes_read});
     std.debug.print("{s}\n", .{buf.written()});
