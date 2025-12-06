@@ -4,34 +4,26 @@ const std = @import("std");
 // Read a file into lines.
 pub const FileLines = struct {
     alloc:      std.mem.Allocator,
-    file_data:  std.Io.Writer.Allocating,       // data of the entire file.
-    slices:     std.ArrayList([]const u8),      // slices into the file data.
+    file_data:  []const u8,                 // data of the entire file.
+    slices:     std.ArrayList([]const u8),  // slices into the file data.
 
     pub fn read(alloc: std.mem.Allocator, dir: std.fs.Dir, filename: []const u8) !FileLines {
-        var file = try dir.openFile(filename, .{});
-        defer file.close();
-
-        const buf = try alloc.alloc(u8, 4096);  // use heap; avoid impacting the stack.
-        defer alloc.free(buf);
-        var f_reader = file.reader(buf);
-        var file_data = std.Io.Writer.Allocating.init(alloc);
-        _ = try f_reader.interface.streamRemaining(&file_data.writer);
-
-        var line_slices: std.ArrayList([]const u8) = .empty;
-        var itr = std.mem.splitScalar(u8, file_data.written(), '\n');
+        const data = try std.fs.Dir.readFileAlloc(dir, filename, alloc, .unlimited);
+        var slices: std.ArrayList([]const u8) = .empty;
+        var itr = std.mem.splitScalar(u8, data, '\n');
         while (itr.next()) |line| {
-            try line_slices.append(alloc, std.mem.trim(u8, line, "\r"));
+            try slices.append(alloc, std.mem.trim(u8, line, "\r"));
         }
 
         return .{
             .alloc = alloc,
-            .file_data = file_data,
-            .slices = line_slices,
+            .file_data = data,
+            .slices = slices,
         };
     }
 
     pub fn deinit(self: *FileLines) void {
-        self.file_data.deinit();
+        self.alloc.free(self.file_data);
         self.slices.deinit(self.alloc);
     }
 
