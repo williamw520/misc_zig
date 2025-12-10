@@ -30,6 +30,22 @@ pub const FileLines = struct {
     pub fn lines(self: *const FileLines) [][]const u8 {
         return self.slices.items;
     }
+
+    /// Trim any leading and trailing empty lines.
+    fn trimmed(self: *const FileLines) [][]const u8 {
+        const raw_lines = self.lines();    
+        var s: usize = 0;               // start index
+        var e: usize = raw_lines.len;   // end index
+        while (s < raw_lines.len and raw_lines[s].len == 0) : (s += 1) {}
+        while (e > 0 and raw_lines[e - 1].len == 0) : (e -= 1) {}
+        return raw_lines[s..e];
+    }
+
+    fn dump(self: *const FileLines) void {
+        for (self.trimmed()) |line| {
+            std.debug.print("{s}\n", .{line});
+        }
+    }
 };
 
 // Read a file into FileLines.
@@ -52,6 +68,13 @@ pub fn main() !void {
     for (fl.lines())|line| {
         std.debug.print("line = '{s}'\n", .{line});
     }
+
+    std.debug.print("--------\n", .{});
+    // Access the lines.
+    for (fl.trimmed())|line| {
+        std.debug.print("line = '{s}'\n", .{line});
+    }
+    
 }
 
 
