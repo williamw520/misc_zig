@@ -5,10 +5,13 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const ArrayList = std.ArrayList;
 
 
+
 /// A succinct data structure to store sparse values of a 4096 array(u64).
 pub const Succinct4096 = struct {
-    bitmap: [64]u64         = .{0} ** 64,   // each block has 64 bits, fitted in u64. 4096 bits.
-    block_sum: [64]u16      = .{0} ** 64,   // stores the sum of bits of the prefix blocks.
+    const NB = 64;                          // number of blocks
+
+    bitmap: [NB]u64         = .{0} ** NB,   // each block has 64 bits, total 4096 bits.
+    block_sum: [NB]u16      = .{0} ** NB,   // stores the sum of bits of the prefix blocks.
     values: ArrayList(u64)  = .empty,       // the actual values, indexed by the rank(i).
 
     pub fn deinit(self: *@This(), alloc: Allocator) void {
@@ -16,14 +19,16 @@ pub const Succinct4096 = struct {
     }
 
     pub fn clear(self: *@This()) void {
-        self.bitmap = .{0} ** 64;
-        self.block_sum = .{0} ** 64;
+        self.bitmap = .{0} ** NB;
+        self.block_sum = .{0} ** NB;
         self.values.clearRetainingCapacity();
     }
 
     /// Get the value at the i-th position.
     /// Complexity: O(1).
     pub fn get(self: *const @This(), i: usize) ?u64 {
+        if (i >= 4096) unreachable;
+
         const idx: u12      = @intCast(i);
         const block_id      = idx >> 6;     // shift off 64 bits to the block id.
         const offset: u6    = @intCast(idx & 0b00111111);
@@ -38,27 +43,37 @@ pub const Succinct4096 = struct {
     /// Set the value at the i-th position.
     /// Complexity: O(1) on existing values. O(k) on new values, 1 < k < 4096.
     /// Use batchInit() to add values instead of adding one by one.
-    pub fn set(self: *@This(), alloc: Allocator, idx: usize, v: u64) !void {
-        const i: u12        = @intCast(idx);
-        const block_id      = i >> 6;
-        const offset: u6    = @intCast(i & 0b00111111);
+    pub fn set(self: *@This(), alloc: Allocator, i: usize, v: u64) !void {
+        if (i >= 4096) unreachable;
+
+        const idx: u12      = @intCast(i);
+        const block_id      = idx >> 6;
+        const offset: u6    = @intCast(idx & 0b00111111);
         const bit_mask: u64 = @as(u64, 1) << offset;
-        const r             = self.rank(i); // rank of existing or insertion point.
+        const r             = self.rank(idx);
 
         if ((self.bitmap[block_id] & bit_mask) != 0) {
             self.values.items[r] = v;       // update existing value is O(1).
             return;
         }
 
-        try self.values.insert(alloc, r,v); // insertion has complexity O(r).
+        try self.values.insert(alloc, r,v); // insertion has complexity O(len - r).
         self.bitmap[block_id] |= bit_mask;  // mark its position in bitmap.
-        self.udpatePrefixSums(block_id);
+        self.updatePrefixSums(block_id);    // only update prefix sums on new insert.
     }
 
     /// Initialize the data structure with an ordered positions and corresponding values.
+    /// `ordered_positions` must be ordered, unique, and within [0-4095].
     /// Complexity: O(1) since O(4096) = O(1)
     pub fn batchInit(self: *@This(), alloc: Allocator,
                      ordered_positions: []const usize, values: []const u64) !void {
+        // Validate monotonic increasing positions.
+        var prev_pos: usize = 0;
+        for (ordered_positions) |i| {
+            std.debug.assert(i < 4096);
+            std.debug.assert(i > prev_pos);
+            prev_pos = i;
+        }        
         self.clear();
         for (ordered_positions, values) |i, v| {
             const block_id      = i >> 6;
@@ -71,6 +86,7 @@ pub const Succinct4096 = struct {
     }
 
     /// Compute the rank of the i-th position. Complexity: O(1).
+    /// Rank is the number of set bits in [0, i).
     inline fn rank(self: *const @This(), i: u12) usize {
         const block_id      = i >> 6;
         const offset: u6    = @intCast(i & 0b00111111);
@@ -80,8 +96,8 @@ pub const Succinct4096 = struct {
         return self.block_sum[block_id] + block_nbits;
     }
 
-    fn udpatePrefixSums(self: *@This(), block_id: usize) void {
-        for (block_id + 1 .. 64) |k| {
+    fn updatePrefixSums(self: *@This(), block_id: usize) void {
+        for (block_id + 1 .. NB) |k| {
             self.block_sum[k] += 1; // each subsequent block gains one bit.
         }
     }
@@ -107,24 +123,24 @@ test {
     defer s1.deinit(alloc);
 
     try std.testing.expect(s1.values.items.len == 0);
-    for (0..64)|i| try std.testing.expect(s1.get(i) == null);
+    for (0..4096)|i| try std.testing.expect(s1.get(i) == null);
 
     try s1.set(alloc, 0, 0);
     try std.testing.expect(s1.values.items.len == count + 1);   count += 1;
     try std.testing.expect(s1.get(0) == 0);
-    for (1..64)|i| try std.testing.expect(s1.get(i) == null);
+    for (1..4096)|i| try std.testing.expect(s1.get(i) == null);
 
     try s1.set(alloc, 0, 10000);    // test update
     try std.testing.expect(s1.values.items.len == count);
     try std.testing.expect(s1.get(0) == 10000);
-    for (1..64)|i| try std.testing.expect(s1.get(i) == null);
+    for (1..4096)|i| try std.testing.expect(s1.get(i) == null);
 
     try s1.set(alloc, 0, 0);
 
     try s1.set(alloc, 1, 1);
     try std.testing.expect(s1.values.items.len == count + 1);   count += 1;
     try std.testing.expect(s1.get(1) == 1);
-    for (2..64)|i| try std.testing.expect(s1.get(i) == null);
+    for (2..4096)|i| try std.testing.expect(s1.get(i) == null);
 
     try s1.set(alloc, 63, 63);      // test first block boundary
     try std.testing.expect(s1.values.items.len == count + 1);   count += 1;
