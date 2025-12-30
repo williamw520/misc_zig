@@ -6,22 +6,22 @@ const ArrayList = std.ArrayList;
 
 
 
-/// A succinct data structure to store sparse values of a 4096 array(u64).
+/// A succinct data structure to store a sparse array of 4096 u64-elements.
 pub const Succinct4096 = struct {
     const NB = 64;                          // number of blocks
 
     bitmap: [NB]u64         = .{0} ** NB,   // each block has 64 bits, total 4096 bits.
-    block_sum: [NB]u16      = .{0} ** NB,   // stores the sum of bits of the prefix blocks.
-    values: ArrayList(u64)  = .empty,       // the actual values, indexed by the rank(i).
+    block_sum: [NB]u12      = .{0} ** NB,   // stores the sum of bits of the prefix blocks.
+    dense: ArrayList(u64)   = .empty,       // the actual values, indexed by rank(i).
 
     pub fn deinit(self: *@This(), alloc: Allocator) void {
-        self.values.deinit(alloc);
+        self.dense.deinit(alloc);
     }
 
     pub fn clear(self: *@This()) void {
-        self.bitmap = .{0} ** NB;
-        self.block_sum = .{0} ** NB;
-        self.values.clearRetainingCapacity();
+        @memset(&self.bitmap, 0);
+        @memset(&self.block_sum, 0);
+        self.dense.clearRetainingCapacity();
     }
 
     /// Get the value at the i-th position.
@@ -29,15 +29,15 @@ pub const Succinct4096 = struct {
     pub fn get(self: *const @This(), i: usize) ?u64 {
         if (i >= 4096) unreachable;
 
-        const idx: u12      = @intCast(i);
-        const block_id      = idx >> 6;     // shift off 64 bits to the block id.
-        const offset: u6    = @intCast(idx & 0b00111111);
-        const bit_mask: u64 = @as(u64, 1) << offset;
+        const pos: u12      = @intCast(i);
+        const block_id      = pos >> 6;     // shift off 64 bits to the block id.
+        const bit_idx: u6   = @intCast(pos & 0b00111111);
+        const bit_mask: u64 = @as(u64, 1) << bit_idx;
 
         if ((self.bitmap[block_id] & bit_mask) == 0)
             return null;                    // value not exist at the i-th position.
 
-        return self.values.items[self.rank(idx)];
+        return self.dense.items[self.rank(pos)];
     }
 
     /// Set the value at the i-th position.
@@ -46,18 +46,18 @@ pub const Succinct4096 = struct {
     pub fn set(self: *@This(), alloc: Allocator, i: usize, v: u64) !void {
         if (i >= 4096) unreachable;
 
-        const idx: u12      = @intCast(i);
-        const block_id      = idx >> 6;
-        const offset: u6    = @intCast(idx & 0b00111111);
-        const bit_mask: u64 = @as(u64, 1) << offset;
-        const r             = self.rank(idx);
+        const pos: u12      = @intCast(i);
+        const block_id      = pos >> 6;
+        const bit_idx: u6   = @intCast(pos & 0b00111111);
+        const bit_mask: u64 = @as(u64, 1) << bit_idx;
+        const r             = self.rank(pos);
 
         if ((self.bitmap[block_id] & bit_mask) != 0) {
-            self.values.items[r] = v;       // update existing value is O(1).
+            self.dense.items[r] = v;        // updating existing value is O(1).
             return;
         }
 
-        try self.values.insert(alloc, r,v); // insertion has complexity O(len - r).
+        try self.dense.insert(alloc, r, v); // insertion has complexity O(len - r).
         self.bitmap[block_id] |= bit_mask;  // mark its position in bitmap.
         self.updatePrefixSums(block_id);    // only update prefix sums on new insert.
     }
@@ -77,10 +77,10 @@ pub const Succinct4096 = struct {
         self.clear();
         for (ordered_positions, values) |i, v| {
             const block_id      = i >> 6;
-            const offset: u6    = @intCast(i & 0b00111111);
-            const bit_mask: u64 = @as(u64, 1) << offset;
+            const bit_idx: u6   = @intCast(i & 0b00111111);
+            const bit_mask: u64 = @as(u64, 1) << bit_idx;
             self.bitmap[block_id] |= bit_mask;
-            try self.values.append(alloc, v);
+            try self.dense.append(alloc, v);
         }
         self.recomputePrefixSums();
     }
@@ -89,8 +89,8 @@ pub const Succinct4096 = struct {
     /// Rank is the number of set bits in [0, i).
     inline fn rank(self: *const @This(), i: u12) usize {
         const block_id      = i >> 6;
-        const offset: u6    = @intCast(i & 0b00111111);
-        const block_mask    = (@as(u64, 1) << offset) - 1;
+        const bit_idx: u6   = @intCast(i & 0b00111111);
+        const block_mask    = (@as(u64, 1) << bit_idx) - 1;
         const block_bits    = self.bitmap[block_id] & block_mask;
         const block_nbits   = @popCount(block_bits);
         return self.block_sum[block_id] + block_nbits;
@@ -98,12 +98,12 @@ pub const Succinct4096 = struct {
 
     fn updatePrefixSums(self: *@This(), block_id: usize) void {
         for (block_id + 1 .. NB) |k| {
-            self.block_sum[k] += 1; // each subsequent block gains one bit.
+            self.block_sum[k] += 1; // each subsequent block gains one count.
         }
     }
 
     fn recomputePrefixSums(self: *@This()) void {
-        var sum: u16 = 0;
+        var sum: u12 = 0;
         for (self.bitmap, 0..) |block_bits, block_id| {
             self.block_sum[block_id] = sum;
             sum += @popCount(block_bits);
@@ -122,48 +122,48 @@ test {
     var s1 = Succinct4096{};
     defer s1.deinit(alloc);
 
-    try std.testing.expect(s1.values.items.len == 0);
+    try std.testing.expect(s1.dense.items.len == 0);
     for (0..4096)|i| try std.testing.expect(s1.get(i) == null);
 
     try s1.set(alloc, 0, 0);
-    try std.testing.expect(s1.values.items.len == count + 1);   count += 1;
+    try std.testing.expect(s1.dense.items.len == count + 1);   count += 1;
     try std.testing.expect(s1.get(0) == 0);
     for (1..4096)|i| try std.testing.expect(s1.get(i) == null);
 
     try s1.set(alloc, 0, 10000);    // test update
-    try std.testing.expect(s1.values.items.len == count);
+    try std.testing.expect(s1.dense.items.len == count);
     try std.testing.expect(s1.get(0) == 10000);
     for (1..4096)|i| try std.testing.expect(s1.get(i) == null);
 
     try s1.set(alloc, 0, 0);
 
     try s1.set(alloc, 1, 1);
-    try std.testing.expect(s1.values.items.len == count + 1);   count += 1;
+    try std.testing.expect(s1.dense.items.len == count + 1);   count += 1;
     try std.testing.expect(s1.get(1) == 1);
     for (2..4096)|i| try std.testing.expect(s1.get(i) == null);
 
     try s1.set(alloc, 63, 63);      // test first block boundary
-    try std.testing.expect(s1.values.items.len == count + 1);   count += 1;
+    try std.testing.expect(s1.dense.items.len == count + 1);   count += 1;
     try std.testing.expect(s1.get(63) == 63);
 
     try s1.set(alloc, 64, 64);      // test first block boundary
-    try std.testing.expect(s1.values.items.len == count + 1);   count += 1;
+    try std.testing.expect(s1.dense.items.len == count + 1);   count += 1;
     try std.testing.expect(s1.get(64) == 64);
 
     try s1.set(alloc, 20, 20);      // out of order insert.
-    try std.testing.expect(s1.values.items.len == count + 1);   count += 1;
+    try std.testing.expect(s1.dense.items.len == count + 1);   count += 1;
     try std.testing.expect(s1.get(20) == 20);
 
     try s1.set(alloc, 65, 65);
-    try std.testing.expect(s1.values.items.len == count + 1);   count += 1;
+    try std.testing.expect(s1.dense.items.len == count + 1);   count += 1;
     try std.testing.expect(s1.get(65) == 65);
 
     try s1.set(alloc, 4094, 4094);  // test last block boundary
-    try std.testing.expect(s1.values.items.len == count + 1);   count += 1;
+    try std.testing.expect(s1.dense.items.len == count + 1);   count += 1;
     try std.testing.expect(s1.get(4094) == 4094);
 
     try s1.set(alloc, 4095, 4095);  // test last item boundary
-    try std.testing.expect(s1.values.items.len == count + 1);   count += 1;
+    try std.testing.expect(s1.dense.items.len == count + 1);   count += 1;
     try std.testing.expect(s1.get(4095) == 4095);
 
     for (0..4096) |i| {
